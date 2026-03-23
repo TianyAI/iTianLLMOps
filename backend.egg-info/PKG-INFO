@@ -1,0 +1,20 @@
+Metadata-Version: 2.4
+Name: backend
+Version: 0.1.0
+Summary: A simple LLM application platform
+Requires-Python: >=3.10
+Requires-Dist: fastapi>=0.104.0
+Requires-Dist: uvicorn[standard]>=0.24.0
+Requires-Dist: sqlmodel>=0.0.14
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: python-jose[cryptography]>=3.3.0
+Requires-Dist: passlib[bcrypt]>=1.7.4
+Requires-Dist: python-multipart>=0.0.6
+Requires-Dist: redis>=5.0.0
+Requires-Dist: langchain>=0.1.0
+Requires-Dist: langchain-openai>=0.0.5
+Requires-Dist: loguru>=0.7.0
+Requires-Dist: pytest>=7.4.0
+Requires-Dist: pytest-asyncio>=0.21.0
+Requires-Dist: black>=23.0.0
+Requires-Dist: ruff>=0.1.0

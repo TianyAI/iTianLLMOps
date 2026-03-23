@@ -1,0 +1,1 @@
+from itian.common.models.base import SQLModelSerializable
