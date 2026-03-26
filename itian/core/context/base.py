@@ -401,18 +401,43 @@ class FunctionContextManager(BaseContextManager[T]):
             **kwargs
     ):
         super().__init__(name, **kwargs)
-        self._init_func = init_func
-        self._cleanup_func = cleanup_func
+        self.init_func = init_func
+        self.cleanup_func = cleanup_func
         self._is_async = asyncio.iscoroutinefunction(init_func)
 
     async def _async_initialize(self) -> T:
-        pass
-
-    async def _async_cleanup(self) -> None:
-        pass
+        """使用初始化函数来初始化实例"""
+        if not self._is_async:
+            # 如果初始化函数不是异步的，则在线程池中执行
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(None, self.init_func)
+        return await self.init_func()
 
     def _sync_initialize(self) -> T:
-        pass
+        """同步初始化"""
+        if self._is_async:
+            raise TypeError(f"无法调用异步初始化函数 '{self.init_func.__name__}' 在同步上下文中")
+        return self.init_func()
+
+    async def _async_cleanup(self) -> None:
+        """使用cleanup()函数来清理实例"""
+        if self.cleanup_func and self._instance:
+            if asyncio.iscoroutinefunction(self.cleanup_func):
+                await self.cleanup_func(self._instance)
+            else:
+                loop = asyncio.get_event_loop()
+                await loop.run_in_executor(None, self.cleanup_func, self._instance)
 
     def _sync_cleanup(self) -> None:
-        pass
+        """同步清理"""
+        if self.cleanup_func and self._instance:
+            if asyncio.iscoroutinefunction(self.cleanup_func):
+                raise TypeError(f"无法调用异步清理函数 '{self.cleanup_func.__name__}' 在同步上下文中")
+            self.cleanup_func(self._instance)
+
+
+class ContextRegistry:
+    """上下文注册表
+
+    管理多个上下文管理器的注册与生命周期
+    """
