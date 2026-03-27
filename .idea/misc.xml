@@ -3,5 +3,5 @@
   <component name="Black">
     <option name="sdkName" value="asr-python" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="itian" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="llama_env" project-jdk-type="Python SDK" />
 </project>

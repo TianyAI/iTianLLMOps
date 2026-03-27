@@ -406,9 +406,9 @@ class FunctionContextManager(BaseContextManager[T]):
         self._is_async = asyncio.iscoroutinefunction(init_func)
 
     async def _async_initialize(self) -> T:
-        """使用初始化函数来初始化实例"""
+        """使用初始化汉纳树来初始化实例"""
         if not self._is_async:
-            # 如果初始化函数不是异步的，则在线程池中执行
+            # 如果初始化函数不是异步大的，则在线程池中执行
             loop = asyncio.get_event_loop()
             return await loop.run_in_executor(None, self.init_func)
         return await self.init_func()
@@ -441,3 +441,46 @@ class ContextRegistry:
 
     管理多个上下文管理器的注册与生命周期
     """
+    def __init__(self):
+        self._contexts: Dict[str, BaseContextManager] = {}
+        self._lock = Lock()
+
+    def register(self, context_manager: BaseContextManager):
+        """注册上下文管理器
+
+        :arg context_manager：要注册的上下文管理器
+
+        :raise ValueError：如果已存在同名上下文
+        """
+        with self._lock:
+            if context_manager.name in self._contexts:
+                logger.warning(f"上下文'{context_manager.name}' 已存在，请勿重复注册")
+                raise ValueError(f"上下文'{context_manager.name}' 已存在，请勿重复注册")
+            self._contexts[context_manager.name] = context_manager
+            logger.debug(f"上下文'{context_manager.name}' 注册成功")
+
+    def unregister(self, name: str):
+        """注销上下文管理器
+
+        :arg name: 要注销的上下文管理器的名称
+
+        :raise ValueError：如果上下文不存在
+        """
+        with self._lock:
+            if name in self._contexts:
+                context = self._contexts[name]
+                # 在删除之前关闭上下文
+                try:
+                    context.async_close()
+                except Exception as e:
+                    logger.warning(f"注销上下文,在关闭上下文'{name}'时出错：{e}")
+                del self._contexts[name]
+                logger.debug(f"注销上下文'{name}'成功")
+
+    def get_context(self, name: str) -> BaseContextManager:
+        """获取上下文管理
+
+        :arg name: 上下文名称
+
+        :returns BaseContextManager: 
+        """
