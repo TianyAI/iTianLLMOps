@@ -448,9 +448,8 @@ class ContextRegistry:
     def register(self, context_manager: BaseContextManager):
         """注册上下文管理器
 
-        :arg context_manager：要注册的上下文管理器
-
-        :raise ValueError：如果已存在同名上下文
+        :arg context_manager: 要注册的上下文管理器
+        :raise ValueError: 如果已存在同名上下文
         """
         with self._lock:
             if context_manager.name in self._contexts:
@@ -463,7 +462,6 @@ class ContextRegistry:
         """注销上下文管理器
 
         :arg name: 要注销的上下文管理器的名称
-
         :raise ValueError：如果上下文不存在
         """
         with self._lock:
@@ -478,9 +476,135 @@ class ContextRegistry:
                 logger.debug(f"注销上下文'{name}'成功")
 
     def get_context(self, name: str) -> BaseContextManager:
-        """获取上下文管理
+        """获取上下文管理器
 
         :arg name: 上下文名称
-
-        :returns BaseContextManager: 
+        :returns BaseContextManager: 上下文管理器对象
+        :raise KeyError 如果上下文资源不存在
         """
+        if name not in self._contexts:
+            raise KeyError(f"上下文'{name}'不存在。可用的上下文资源：{list(self._contexts.keys())}")
+        return self._contexts[name]
+
+    def has_context(self, name: str) -> bool:
+        """检查上下文资源是否存在
+
+        :arg name: 上下文名称
+        :returns bool: 如果上下文资源存在则返回True，否则返回False
+        """
+        return name in self._contexts
+
+    async def async_get_instance(self, name: str) -> Any:
+        """获取异步上下文实例
+
+        :arg name: 上下文名称
+        :returns Any: 上下文实例对象
+        :raise KeyError 如果上下文资源不存在
+        """
+        context = self.get_context(name)
+        return context.async_get_instance()
+
+    def sync_get_instance(self, name: str) -> Any:
+        """获取同步上下文实例
+
+        :arg name: 上下文名称
+        :returns Any: 上下文实例对象
+        :raise KeyError 如果上下文资源不存在
+        """
+        context = self.get_context(name)
+        return context.sync_get_instance()
+
+    async def async_close_all(self) -> None:
+        """异步关闭所有上下文管理器"""
+        contexts = list(self._contexts.values())
+
+        # 关闭所有上下文以提高性能
+        close_tasks = [context.async_close() for context in contexts]
+        results = await asyncio.gather(*close_tasks, return_exceptions=True)
+
+        # 关闭时打印错误日志
+        for context, result in zip(contexts, results):
+            if isinstance(result, Exception):
+                logger.error(f"关闭上下文'{context.name}'时出错：{result}")
+
+    def sync_close_all(self) -> None:
+        """同步关闭所有上下文管理器"""
+        for context in self._contexts.values():
+            try:
+                context.sync_close()
+            except Exception as e:
+                logger.error(f"关闭上下文'{context.name}'时出错：{e}")
+
+    def get_all_contexts(self) -> Dict[str, BaseContextManager]:
+        """获取所有上下文副本
+
+        :return Dict[str, BaseContextManager]: 包含所有上下文管理器的字典副本
+        """
+        return self._contexts.copy()
+
+    def get_ready_contexts(self) -> Dict[str, BaseContextManager]:
+        """获取所有已就绪的上下文副本
+
+        :return Dict[str, BaseContextManager]: 仅包含已就绪的上下文管理器的字典副本
+        """
+        return {
+            name: context
+            for name, context in self._contexts.items()
+            if context.is_ready()
+        }
+
+    def get_context_states(self) -> Dict[str, ContextState]:
+        """获取所有上下文状态
+
+        :return Dict[str, ContextState]: 包含所有上下文状态的字典
+        """
+        return {
+            name: context.get_state()
+            for name, context in self._contexts.items()
+        }
+
+    async def health_check(self) -> Dict[str, bool]:
+        """检查所有上下文健康状态
+
+        :return Dict[str, bool]: 包含所有上下文健康状态的字典
+        """
+        results = {}
+        for name, context in self._contexts.items():
+            try:
+                # 如果上下文中存在自定义的健康检查方法，则优先使用
+                if hasattr(context, "health_check") and callable(getattr(context, "health_check")):
+                    health_check_func = getattr(context, "health_check")
+                    if asyncio.iscoroutinefunction(health_check_func):
+                        results[name] = await health_check_func()
+                    else:
+                        results[name] = health_check_func()
+                else:
+                    results[name] = context.is_ready()
+            except Exception as e:
+                logger.error(f"检查上下文'{name}'健康状态时出错：{e}")
+                results[name] = False
+        return results
+
+    def clear(self) -> None:
+        """清除所有上下文（先关闭再删除）"""
+        with self._lock:
+            # 先关闭所有上下文
+            self.sync_close_all()
+            # 清空注册器
+            self._contexts.clear()
+            logger.debug("所有来自注册器的上下文已全部清除")
+
+    def __len__(self):
+        """返回已注册的上下文的长度"""
+        return len(self._contexts)
+
+    def __contains__(self, name: str) -> bool:
+        """检查指定名称的上下文是否存在"""
+        return name in self._contexts
+
+    def __iter__(self):
+        """返回已注册的上下文的迭代器"""
+        return iter(self._contexts.keys())
+
+    def __repr__(self) -> str:
+        return f"<ContextRegistry(contexts={list(self._contexts.keys())})>"
